@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -33,10 +35,15 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    implementation(libs.bundles.commonAndroid)
+    testImplementation(libs.bundles.commonTest)
+    androidTestImplementation(libs.bundles.commonTest)
+
+//    hilt
+    implementation(libs.bundles.hilt)
+    ksp(libs.hilt.compiler)
+
+//    Room Dependency
+    implementation(libs.bundles.room)
+    ksp(libs.room.compiler)
 }
