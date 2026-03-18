@@ -1,5 +1,8 @@
 # AgentVerse
 
+[![Status](https://badge.aiyu.co.in/badge/In-Development)](https://github.com/aiyu-ayaan/Agent-Verse)
+[![LOC](https://badge.aiyu.co.in/repo-batch?owner=aiyu-ayaan&repo=Agent-Verse&fields=loc)](https://github.com/aiyu-ayaan/Agent-Verse)
+
 ## Overview
 
 AgentVerse is an Android application designed to integrate and orchestrate multiple AI agents within a unified architecture. This project provides a scalable foundation for building AI-powered mobile experiences using modular clean architecture.
