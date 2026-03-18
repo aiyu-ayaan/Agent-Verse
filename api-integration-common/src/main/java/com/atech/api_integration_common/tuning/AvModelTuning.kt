@@ -14,7 +14,7 @@
 
 package com.atech.api_integration_common.tuning
 
-import com.atech.api_integration_common.domain.model.AvModelConfig
+import com.atech.api_integration_common.model.AvModelConfig
 
 /**
  * Defines an interface for tuning AI model configurations in the AgentVerse system.
