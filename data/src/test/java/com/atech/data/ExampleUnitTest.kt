@@ -1,3 +1,17 @@
+/*
+ *
+ *  Copyright (c) 2026 Ayaan.
+ *  Licensed under the MIT License.
+ *
+ *  Created: 2026
+ *  Modified: 3/18/26, 9:46 PM
+ *
+ *  AgentVerse
+ *  Integrates multiple AI models with a modular clean architecture.
+ *
+ *
+ */
+
 package com.atech.data
 
 import org.junit.Test

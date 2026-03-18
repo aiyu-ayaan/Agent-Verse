@@ -1,7 +1,22 @@
+/*
+ *
+ *  Copyright (c) 2026 Ayaan.
+ *  Licensed under the MIT License.
+ *
+ *  Created: 2026
+ *  Modified: 3/18/26, 9:46 PM
+ *
+ *  AgentVerse
+ *  Integrates multiple AI models with a modular clean architecture.
+ *
+ *
+ */
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
