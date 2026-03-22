@@ -12,7 +12,7 @@
  *
  */
 
-package com.atech.api_integration_common.model
+package com.atech.api_integration_common.model.request
 
 import androidx.annotation.Keep
 import kotlinx.serialization.Serializable
