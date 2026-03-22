@@ -29,13 +29,15 @@ import kotlinx.serialization.Serializable
  * @see AvModel
  * @see AvMessage
  * @see AvModelConfig
+ * @see OutputSettings
  */
 @Keep
 @Serializable
 data class AvRequest(
     val model : AvModel,
     val message : List<AvMessage>,
-    val modelConfig: AvModelConfig = AvModelConfig()
+    val modelConfig: AvModelConfig = AvModelConfig(),
+    val outputSettings: OutputSettings = OutputSettings()
 )
 
 
