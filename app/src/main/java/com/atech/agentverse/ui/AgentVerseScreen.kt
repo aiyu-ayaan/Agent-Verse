@@ -1,6 +1,7 @@
 package com.atech.agentverse.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,16 +27,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.PersonAddAlt1
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,12 +47,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
@@ -63,6 +65,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -72,7 +76,6 @@ import com.atech.agentverse.presentation.SettingsTab
 import com.atech.api_integration_common.model.AvProvider
 import com.atech.api_integration_common.model.AvRole
 import com.atech.core.model.ProviderUsageSummary
-import com.atech.ui_common.components.AvChatBubble
 import com.atech.ui_common.components.AvLabeledField
 import com.atech.ui_common.components.AvProviderSwitcher
 import com.atech.ui_common.components.AvSectionCard
@@ -105,13 +108,22 @@ fun AgentVerseScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val isChatScreen = state.activeScreen == ScreenDestination.CHAT
 
     val pageBackground = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.background,
-        ),
+        colors = if (isChatScreen) {
+            listOf(
+                Color(0xFF020202),
+                Color(0xFF060606),
+                Color(0xFF020202),
+            )
+        } else {
+            listOf(
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surface,
+                MaterialTheme.colorScheme.background,
+            )
+        },
     )
 
     ModalNavigationDrawer(
@@ -149,40 +161,31 @@ fun AgentVerseScreen(
                 .background(pageBackground),
         ) {
             Scaffold(
-                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                containerColor = Color.Transparent,
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = if (state.activeScreen == ScreenDestination.CHAT) {
-                                    state.conversations
-                                        .firstOrNull { it.conversationId == state.selectedConversationId }
-                                        ?.title
-                                        ?: "New Chat"
-                                } else {
-                                    "Settings"
-                                },
-                                maxLines = 1,
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Rounded.Menu, contentDescription = "Menu")
-                            }
-                        },
-                        actions = {
-                            if (state.activeScreen == ScreenDestination.CHAT) {
-                                IconButton(onClick = onOpenSettingsScreen) {
-                                    Icon(Icons.Rounded.Settings, contentDescription = "Settings")
+                    if (!isChatScreen) {
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    text = "Settings",
+                                    maxLines = 1,
+                                )
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Rounded.Menu, contentDescription = "Menu")
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 },
             ) { innerPadding ->
                 when (state.activeScreen) {
                     ScreenDestination.CHAT -> ChatScreenContent(
                         state = state,
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
+                        onOpenSettingsScreen = onOpenSettingsScreen,
+                        onCreateNewChat = onCreateNewChat,
                         onPromptChanged = onPromptChanged,
                         onSendPrompt = onSendPrompt,
                         modifier = Modifier
@@ -318,6 +321,9 @@ private fun DrawerContent(
 @Composable
 private fun ChatScreenContent(
     state: MainUiState,
+    onOpenDrawer: () -> Unit,
+    onOpenSettingsScreen: () -> Unit,
+    onCreateNewChat: () -> Unit,
     onPromptChanged: (String) -> Unit,
     onSendPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -333,23 +339,34 @@ private fun ChatScreenContent(
     }
 
     Column(
-        modifier = modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Surface(
+        ChatTopBar(
+            onOpenDrawer = onOpenDrawer,
+            onOpenSettingsScreen = onOpenSettingsScreen,
+            onCreateNewChat = onCreateNewChat,
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            tonalElevation = 1.dp,
         ) {
-            if (state.messages.isEmpty()) {
-                EmptyConversationView(modifier = Modifier.fillMaxSize())
+            if (state.messages.isEmpty() && state.streamingAssistantText.isBlank()) {
+                EmptyConversationView(
+                    onSuggestionSelected = onPromptChanged,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 MessageTimeline(state = state, listState = listState)
             }
         }
+
+        Spacer(Modifier.height(8.dp))
 
         ComposerBar(
             prompt = state.prompt,
@@ -362,61 +379,146 @@ private fun ChatScreenContent(
 }
 
 @Composable
-private fun EmptyConversationView(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+private fun ChatTopBar(
+    onOpenDrawer: () -> Unit,
+    onOpenSettingsScreen: () -> Unit,
+    onCreateNewChat: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
+        Surface(
+            modifier = Modifier.size(44.dp),
+            shape = CircleShape,
+            color = Color(0xFF222327),
         ) {
-            Icon(
-                imageVector = Icons.Rounded.AutoAwesome,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            IconButton(onClick = onOpenDrawer, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = Icons.Rounded.Menu,
+                    contentDescription = "Open history",
+                    tint = Color(0xFFD9D9DC),
+                )
+            }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            text = "Start a new conversation",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = "Ask anything, write code, summarize docs, or switch providers from settings.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
-        )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SuggestionChip(icon = Icons.Rounded.Search, label = "Research")
-            SuggestionChip(icon = Icons.Rounded.Code, label = "Code")
-            SuggestionChip(icon = Icons.Rounded.AutoAwesome, label = "Ideas")
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFF17181B),
+            border = BorderStroke(1.dp, Color(0xFF2E3034)),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconButton(onClick = onOpenSettingsScreen, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.PersonAddAlt1,
+                        contentDescription = "Open settings",
+                        tint = Color(0xFFD8D8DB),
+                    )
+                }
+                IconButton(onClick = onCreateNewChat, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = "New chat",
+                        tint = Color(0xFFD8D8DB),
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SuggestionChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
+private fun EmptyConversationView(
+    onSuggestionSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    AssistChip(
-        onClick = {},
-        label = { Text(label) },
-        leadingIcon = {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-        },
-    )
+    Column(
+        modifier = modifier.padding(horizontal = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = "What can I help with?",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFF0F0F2),
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(18.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SuggestionActionChip(
+                icon = Icons.Rounded.Image,
+                label = "Create image",
+                iconTint = Color(0xFF6BE48D),
+                onClick = { onSuggestionSelected("Create image") },
+            )
+            SuggestionActionChip(
+                icon = Icons.Rounded.Visibility,
+                label = "Analyze images",
+                iconTint = Color(0xFF7B73FF),
+                onClick = { onSuggestionSelected("Analyze images") },
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SuggestionActionChip(
+                icon = Icons.Rounded.Code,
+                label = "Code",
+                iconTint = Color(0xFF7B73FF),
+                onClick = { onSuggestionSelected("Help me with code") },
+            )
+            SuggestionActionChip(
+                icon = Icons.Rounded.BarChart,
+                label = "Analyze data",
+                iconTint = Color(0xFF6CD4FF),
+                onClick = { onSuggestionSelected("Analyze this data") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SuggestionActionChip(
+    icon: ImageVector,
+    label: String,
+    iconTint: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFF08090A),
+        border = BorderStroke(1.dp, Color(0xFF222428)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = iconTint,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFFC5C7CC),
+            )
+        }
+    }
 }
 
 @Composable
@@ -427,12 +529,12 @@ private fun MessageTimeline(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 10.dp),
+            .padding(horizontal = 2.dp, vertical = 6.dp),
         state = listState,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(state.messages, key = { it.id }) { message ->
-            AvChatBubble(
+            ChatMessageBubble(
                 roleLabel = "${message.role} • ${message.modelId}",
                 content = message.content,
                 isUser = message.role == AvRole.USER.name,
@@ -441,7 +543,7 @@ private fun MessageTimeline(
 
         if (state.streamingAssistantText.isNotBlank()) {
             item(key = "streaming-assistant") {
-                AvChatBubble(
+                ChatMessageBubble(
                     roleLabel = "ASSISTANT • ${state.selectedProvider.name} (streaming)",
                     content = state.streamingAssistantText,
                     isUser = false,
@@ -452,18 +554,57 @@ private fun MessageTimeline(
         if (state.isSending && state.streamingAssistantText.isBlank()) {
             item {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF111214),
+                    border = BorderStroke(1.dp, Color(0xFF232428)),
                 ) {
                     Text(
                         text = "Assistant is thinking...",
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB5B8BE),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatMessageBubble(
+    roleLabel: String,
+    content: String,
+    isUser: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(if (isUser) 0.85f else 0.92f),
+            shape = RoundedCornerShape(
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = if (isUser) 18.dp else 8.dp,
+                bottomEnd = if (isUser) 8.dp else 18.dp,
+            ),
+            color = if (isUser) Color(0xFF1B2434) else Color(0xFF111214),
+            border = if (isUser) null else BorderStroke(1.dp, Color(0xFF27282D)),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = roleLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF8D92A0),
+                )
+                Text(
+                    text = content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFE8E9EC),
+                )
             }
         }
     }
@@ -477,40 +618,76 @@ private fun ComposerBar(
     onSendPrompt: () -> Unit,
     errorMessage: String?,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp,
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF18191D),
+            border = BorderStroke(1.dp, Color(0xFF2A2C31)),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                OutlinedTextField(
+                IconButton(onClick = {}) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Add attachment",
+                        tint = Color(0xFFCFD1D6),
+                    )
+                }
+
+                TextField(
                     value = prompt,
                     onValueChange = onPromptChanged,
                     modifier = Modifier.weight(1f),
-                    minLines = 1,
-                    maxLines = 5,
-                    placeholder = { Text("Message AgentVerse") },
-                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true,
+                    placeholder = {
+                        Text(
+                            text = "Ask ChatGPT",
+                            color = Color(0xFF9598A0),
+                        )
+                    },
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        disabledContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedTextColor = Color(0xFFF1F2F4),
+                        unfocusedTextColor = Color(0xFFF1F2F4),
+                        disabledTextColor = Color(0xFFF1F2F4),
+                        cursorColor = Color(0xFFF1F2F4),
                     ),
                 )
 
-                FilledIconButton(
-                    onClick = onSendPrompt,
-                    enabled = !isSending,
-                    modifier = Modifier.size(52.dp),
+                IconButton(onClick = {}, enabled = !isSending) {
+                    Icon(
+                        imageVector = Icons.Rounded.Mic,
+                        contentDescription = "Voice input",
+                        tint = Color(0xFFCFD1D6),
+                    )
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = !isSending && prompt.isNotBlank(), onClick = onSendPrompt),
+                    shape = CircleShape,
+                    color = if (prompt.isNotBlank()) Color(0xFFECEEF2) else Color(0xFF3A3C42),
                 ) {
-                    Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (prompt.isNotBlank()) Icons.AutoMirrored.Rounded.Send else Icons.Rounded.GraphicEq,
+                            contentDescription = "Send",
+                            tint = if (prompt.isNotBlank()) Color(0xFF16171A) else Color(0xFFA8ABB3),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }
@@ -520,7 +697,7 @@ private fun ComposerBar(
                 text = errorMessage.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = 8.dp),
             )
         }
     }
