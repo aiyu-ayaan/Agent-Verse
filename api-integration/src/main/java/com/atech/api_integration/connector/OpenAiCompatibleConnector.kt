@@ -111,7 +111,7 @@ abstract class OpenAiCompatibleConnector(
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
-            val payload = response.body?.string().orEmpty()
+            val payload = response.body.string()
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, payload)
             }
@@ -127,7 +127,7 @@ abstract class OpenAiCompatibleConnector(
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
-            val payload = response.body?.string().orEmpty()
+            val payload = response.body.string()
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, payload)
             }
