@@ -124,6 +124,7 @@ data class AvModelConfig(
  * allowing for configuration of how the output should be generated and delivered.
  * This structure provides a way to specify whether the response should be streamed in real-time or delivered as a complete output, enabling more flexible and efficient handling of responses based on the specific requirements of the application or use case.
  * @param stream A boolean flag indicating whether the response should be streamed in real-time (true) or delivered as a complete output (false).
+ * @Param memorySize An integer specifying the size of the memory buffer for storing conversation history, which can be used to maintain context across multiple interactions with the AI model.
  * @see AvModelConfig
  * @see AvRequest
  * @see AvMessage
@@ -131,6 +132,7 @@ data class AvModelConfig(
 @Keep
 @Serializable
 data class OutputSettings(
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val memorySize : Int = 5
 )
 
