@@ -1,6 +1,7 @@
 package com.atech.api_integration.connector
 
 import com.atech.api_integration.network.OpenAiChatCompletionRequest
+import com.atech.api_integration.network.OpenAiChatCompletionChunk
 import com.atech.api_integration.network.OpenAiChatCompletionResponse
 import com.atech.api_integration.network.OpenAiMessage
 import com.atech.api_integration.network.OpenAiModelsResponse
@@ -60,22 +61,12 @@ abstract class OpenAiCompatibleConnector(
                 headers = buildHeaders(credentials),
                 body = body,
             )
-            val parsed = json.decodeFromString<OpenAiChatCompletionResponse>(raw)
 
-            val choice = parsed.choices.firstOrNull() ?: error("No completion returned")
-            val assistantMessage = choice.message?.toDomain()
-                ?: AvMessage(role = AvRole.ASSISTANT, content = "")
-
-            AvChatResponse(
-                requestId = parsed.id ?: "",
-                provider = provider,
-                modelId = parsed.model ?: request.modelId,
-                createdAtEpochMs = (parsed.created ?: System.currentTimeMillis() / 1000L) * 1000L,
-                message = assistantMessage,
-                finishReason = choice.finishReason,
-                usage = parsed.usage.toDomain(),
-                rawResponse = raw,
-            )
+            if (request.modelConfig.stream) {
+                parseStreamCompletion(raw, request)
+            } else {
+                parseStandardCompletion(raw, request)
+            }
         }.recoverCatching { throwable ->
             throw throwable.toApiError(provider)
         }
@@ -168,6 +159,80 @@ abstract class OpenAiCompatibleConnector(
             else -> AvRole.USER
         }
         return AvMessage(role = mappedRole, content = content, name = name)
+    }
+
+    private fun parseStandardCompletion(raw: String, request: AvChatRequest): AvChatResponse {
+        val parsed = json.decodeFromString<OpenAiChatCompletionResponse>(raw)
+        val choice = parsed.choices.firstOrNull() ?: error("No completion returned")
+        val assistantMessage = choice.message?.toDomain()
+            ?: AvMessage(role = AvRole.ASSISTANT, content = "")
+
+        return AvChatResponse(
+            requestId = parsed.id ?: "",
+            provider = provider,
+            modelId = parsed.model ?: request.modelId,
+            createdAtEpochMs = (parsed.created ?: System.currentTimeMillis() / 1000L) * 1000L,
+            message = assistantMessage,
+            finishReason = choice.finishReason,
+            usage = parsed.usage.toDomain(),
+            rawResponse = raw,
+        )
+    }
+
+    private fun parseStreamCompletion(raw: String, request: AvChatRequest): AvChatResponse {
+        if (!raw.contains("data:")) {
+            return parseStandardCompletion(raw, request)
+        }
+
+        var requestId = ""
+        var model = request.modelId
+        var createdAtEpochMs = System.currentTimeMillis()
+        var role: AvRole = AvRole.ASSISTANT
+        var finishReason: String? = null
+        var usage: OpenAiUsage? = null
+        val content = StringBuilder()
+
+        raw.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("data:") }
+            .forEach { line ->
+                val payload = line.removePrefix("data:").trim()
+                if (payload == "[DONE]" || payload.isEmpty()) {
+                    return@forEach
+                }
+
+                val chunk = runCatching {
+                    json.decodeFromString<OpenAiChatCompletionChunk>(payload)
+                }.getOrNull() ?: return@forEach
+
+                if (!chunk.id.isNullOrBlank()) requestId = chunk.id
+                if (!chunk.model.isNullOrBlank()) model = chunk.model
+                if (chunk.created != null) createdAtEpochMs = chunk.created * 1000L
+                if (chunk.usage != null) usage = chunk.usage
+
+                val choice = chunk.choices.firstOrNull()
+                choice?.delta?.role?.let { role = mapRole(it) }
+                choice?.delta?.content?.let(content::append)
+                choice?.finishReason?.takeIf { it.isNotBlank() }?.let { finishReason = it }
+            }
+
+        return AvChatResponse(
+            requestId = requestId,
+            provider = provider,
+            modelId = model,
+            createdAtEpochMs = createdAtEpochMs,
+            message = AvMessage(role = role, content = content.toString()),
+            finishReason = finishReason,
+            usage = usage.toDomain(),
+            rawResponse = raw,
+        )
+    }
+
+    private fun mapRole(value: String): AvRole = when (value.lowercase()) {
+        "system" -> AvRole.SYSTEM
+        "assistant" -> AvRole.ASSISTANT
+        "tool" -> AvRole.TOOL
+        else -> AvRole.USER
     }
 
     private fun OpenAiUsage?.toDomain(): AvTokenUsage = this?.let {

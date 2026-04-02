@@ -59,6 +59,29 @@ data class OpenAiUsage(
 )
 
 @Serializable
+data class OpenAiChatCompletionChunk(
+    val id: String? = null,
+    val model: String? = null,
+    val created: Long? = null,
+    val choices: List<OpenAiChunkChoice> = emptyList(),
+    val usage: OpenAiUsage? = null,
+)
+
+@Serializable
+data class OpenAiChunkChoice(
+    val index: Int? = null,
+    val delta: OpenAiDelta? = null,
+    @SerialName("finish_reason")
+    val finishReason: String? = null,
+)
+
+@Serializable
+data class OpenAiDelta(
+    val role: String? = null,
+    val content: String? = null,
+)
+
+@Serializable
 data class OpenAiModelsResponse(
     val data: List<OpenAiModelData> = emptyList()
 )
