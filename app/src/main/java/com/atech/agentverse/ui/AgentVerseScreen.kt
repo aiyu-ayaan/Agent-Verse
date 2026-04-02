@@ -13,9 +13,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -97,7 +102,8 @@ fun AgentVerseScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(text = "+ New Chat")
+                        Icon(Icons.Rounded.Add, contentDescription = null)
+                        Text(text = "  New Chat")
                     }
                     NavigationDrawerItem(
                         label = { Text("Chat") },
@@ -162,13 +168,13 @@ fun AgentVerseScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Text("Menu")
+                            Icon(Icons.Rounded.Menu, contentDescription = "Menu")
                         }
                     },
                     actions = {
                         if (state.activeScreen == ScreenDestination.CHAT) {
                             IconButton(onClick = onOpenSettingsScreen) {
-                                Text("Settings")
+                                Icon(Icons.Rounded.Settings, contentDescription = "Settings")
                             }
                         }
                     },
