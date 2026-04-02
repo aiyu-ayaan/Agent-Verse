@@ -1,0 +1,197 @@
+package com.atech.api_integration.connector
+
+import com.atech.api_integration.network.OpenAiChatCompletionRequest
+import com.atech.api_integration.network.OpenAiChatCompletionResponse
+import com.atech.api_integration.network.OpenAiMessage
+import com.atech.api_integration.network.OpenAiModelsResponse
+import com.atech.api_integration.network.OpenAiUsage
+import com.atech.api_integration_common.contract.AvProviderConnector
+import com.atech.api_integration_common.error.AvApiError
+import com.atech.api_integration_common.model.AvChatRequest
+import com.atech.api_integration_common.model.AvChatResponse
+import com.atech.api_integration_common.model.AvMessage
+import com.atech.api_integration_common.model.AvModelSummary
+import com.atech.api_integration_common.model.AvProvider
+import com.atech.api_integration_common.model.AvProviderCredentials
+import com.atech.api_integration_common.model.AvRole
+import com.atech.api_integration_common.model.AvTokenUsage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+
+abstract class OpenAiCompatibleConnector(
+    private val okHttpClient: OkHttpClient,
+    private val json: Json,
+) : AvProviderConnector {
+
+    protected abstract val defaultBaseUrl: String
+
+    protected abstract fun buildHeaders(credentials: AvProviderCredentials): Map<String, String>
+
+    override suspend fun chatCompletion(
+        request: AvChatRequest,
+        credentials: AvProviderCredentials,
+    ): Result<AvChatResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(request.provider == provider) {
+                "Request provider ${request.provider} does not match connector $provider"
+            }
+
+            val payload = OpenAiChatCompletionRequest(
+                model = request.modelId,
+                messages = request.messages.map { it.toNetwork() },
+                temperature = request.modelConfig.temperature,
+                maxTokens = request.modelConfig.maxTokens,
+                topP = request.modelConfig.topP,
+                frequencyPenalty = request.modelConfig.frequencyPenalty,
+                presencePenalty = request.modelConfig.presencePenalty,
+                stop = request.modelConfig.stopSequences.takeIf { it.isNotEmpty() },
+                stream = request.modelConfig.stream,
+            )
+
+            val body = json.encodeToString(payload)
+            val raw = executePost(
+                url = buildUrl(credentials, "chat/completions"),
+                headers = buildHeaders(credentials),
+                body = body,
+            )
+            val parsed = json.decodeFromString<OpenAiChatCompletionResponse>(raw)
+
+            val choice = parsed.choices.firstOrNull() ?: error("No completion returned")
+            val assistantMessage = choice.message?.toDomain()
+                ?: AvMessage(role = AvRole.ASSISTANT, content = "")
+
+            AvChatResponse(
+                requestId = parsed.id ?: "",
+                provider = provider,
+                modelId = parsed.model ?: request.modelId,
+                createdAtEpochMs = (parsed.created ?: System.currentTimeMillis() / 1000L) * 1000L,
+                message = assistantMessage,
+                finishReason = choice.finishReason,
+                usage = parsed.usage.toDomain(),
+                rawResponse = raw,
+            )
+        }.recoverCatching { throwable ->
+            throw throwable.toApiError(provider)
+        }
+    }
+
+    override suspend fun listModels(credentials: AvProviderCredentials): Result<List<AvModelSummary>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val raw = executeGet(
+                    url = buildUrl(credentials, "models"),
+                    headers = buildHeaders(credentials),
+                )
+                val parsed = json.decodeFromString<OpenAiModelsResponse>(raw)
+                parsed.data.map {
+                    AvModelSummary(
+                        id = it.id,
+                        provider = provider,
+                        ownedBy = it.ownedBy,
+                        contextWindow = it.contextLength,
+                    )
+                }
+            }.recoverCatching { throwable ->
+                throw throwable.toApiError(provider)
+            }
+        }
+
+    private fun executePost(url: String, headers: Map<String, String>, body: String): String {
+        val requestBody = body.toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .applyHeaders(headers)
+            .build()
+
+        okHttpClient.newCall(request).execute().use { response ->
+            val payload = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw HttpStatusException(response.code, payload)
+            }
+            return payload
+        }
+    }
+
+    private fun executeGet(url: String, headers: Map<String, String>): String {
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .applyHeaders(headers)
+            .build()
+
+        okHttpClient.newCall(request).execute().use { response ->
+            val payload = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw HttpStatusException(response.code, payload)
+            }
+            return payload
+        }
+    }
+
+    private fun Request.Builder.applyHeaders(headers: Map<String, String>): Request.Builder {
+        headers.forEach { (name, value) ->
+            if (value.isNotBlank()) {
+                header(name, value)
+            }
+        }
+        return this
+    }
+
+    private fun buildUrl(credentials: AvProviderCredentials, path: String): String {
+        val base = credentials.baseUrl?.takeIf { it.isNotBlank() } ?: defaultBaseUrl
+        val normalizedBase = if (base.endsWith('/')) base else "$base/"
+        return "$normalizedBase$path"
+    }
+
+    private fun AvMessage.toNetwork(): OpenAiMessage {
+        val mappedRole = when (role) {
+            AvRole.SYSTEM -> "system"
+            AvRole.USER -> "user"
+            AvRole.ASSISTANT -> "assistant"
+            AvRole.TOOL -> "tool"
+        }
+        return OpenAiMessage(role = mappedRole, content = content, name = name)
+    }
+
+    private fun OpenAiMessage.toDomain(): AvMessage {
+        val mappedRole = when (role.lowercase()) {
+            "system" -> AvRole.SYSTEM
+            "assistant" -> AvRole.ASSISTANT
+            "tool" -> AvRole.TOOL
+            else -> AvRole.USER
+        }
+        return AvMessage(role = mappedRole, content = content, name = name)
+    }
+
+    private fun OpenAiUsage?.toDomain(): AvTokenUsage = this?.let {
+        AvTokenUsage(
+            promptTokens = it.promptTokens,
+            completionTokens = it.completionTokens,
+            totalTokens = it.totalTokens,
+            cacheReadTokens = it.promptCacheHitTokens,
+            cacheWriteTokens = it.promptCacheMissTokens,
+        )
+    } ?: AvTokenUsage(0, 0, 0)
+
+    private fun Throwable.toApiError(provider: AvProvider): Throwable = when (this) {
+        is HttpStatusException -> when (statusCode) {
+            401, 403 -> AvApiError.AuthenticationFailed(provider.name)
+            429 -> AvApiError.RateLimited(provider.name)
+            else -> AvApiError.Unknown(provider.name, this)
+        }
+
+        else -> AvApiError.Network(provider.name, this)
+    }
+
+    private class HttpStatusException(
+        val statusCode: Int,
+        message: String,
+    ) : Exception("HTTP $statusCode: $message")
+}

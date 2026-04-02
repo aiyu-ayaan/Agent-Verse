@@ -51,8 +51,13 @@ android {
 }
 
 dependencies {
-    implementation(libs.bundles.commonAndroid)
-    implementation(libs.bundles.hilt)
+    implementation(libs.androidx.core.ktx)
+    implementation(project(":api-integration-common"))
+    implementation(libs.hilt.android)
+    implementation(libs.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
     testImplementation(libs.bundles.commonTest)
     androidTestImplementation(libs.bundles.commonTest)
     ksp(libs.hilt.compiler)
