@@ -14,6 +14,7 @@
 
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -50,15 +51,13 @@ android {
 }
 
 dependencies {
-    implementation(libs.bundles.commonAndroid)
+    implementation(libs.androidx.core.ktx)
+    implementation(project(":api-integration-common"))
+    implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.bundles.commonTest)
     androidTestImplementation(libs.bundles.commonTest)
 
-//    hilt
+    // hilt
     implementation(libs.bundles.hilt)
     ksp(libs.hilt.compiler)
-
-//    Room Dependency
-    implementation(libs.bundles.room)
-    ksp(libs.room.compiler)
 }
