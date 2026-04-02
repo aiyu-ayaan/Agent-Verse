@@ -16,10 +16,13 @@ package com.atech.agentverse.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val AvBlue = Color(0xFF1167EC)
+val AvBlueLight = Color(0xFFD7E7FF)
+val AvMint = Color(0xFF23A98C)
+val AvInk = Color(0xFF10151F)
+val AvMist = Color(0xFFF4F7FC)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val AvDarkPrimary = Color(0xFF9BC2FF)
+val AvDarkSecondary = Color(0xFF9FD7CB)
+val AvDarkBackground = Color(0xFF0A1018)
+val AvDarkSurface = Color(0xFF121A26)

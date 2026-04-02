@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.bundles.commonAndroid)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.bundles.compose)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.bundles.hilt)
     testImplementation(libs.bundles.commonTest)
     androidTestImplementation(libs.bundles.commonTest)

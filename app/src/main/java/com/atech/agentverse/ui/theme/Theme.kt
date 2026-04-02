@@ -23,34 +23,45 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = AvDarkPrimary,
+    onPrimary = AvInk,
+    secondary = AvDarkSecondary,
+    onSecondary = AvInk,
+    background = AvDarkBackground,
+    onBackground = Color(0xFFEAF1FF),
+    surface = AvDarkSurface,
+    onSurface = Color(0xFFEAF1FF),
+    surfaceVariant = Color(0xFF1A2534),
+    onSurfaceVariant = Color(0xFFC7D4E8),
+    outline = Color(0xFF4E5D75),
+    error = Color(0xFFFFB4AB),
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = AvBlue,
     onPrimary = Color.White,
+    secondary = AvMint,
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    background = AvMist,
+    onBackground = AvInk,
+    surface = Color.White,
+    onSurface = AvInk,
+    surfaceVariant = Color(0xFFEAF0FA),
+    onSurfaceVariant = Color(0xFF4B5B73),
+    outline = Color(0xFFC3CEDF),
+    error = Color(0xFFB3261E),
+    primaryContainer = AvBlueLight,
+    onPrimaryContainer = Color(0xFF00275D),
 )
 
 @Composable
 fun AgentVerseTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
