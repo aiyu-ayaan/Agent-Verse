@@ -27,6 +27,11 @@ class MainActivity : ComponentActivity() {
 
                 AgentVerseScreen(
                     state = state,
+                    onOpenChatScreen = viewModel::onOpenChatScreen,
+                    onOpenSettingsScreen = viewModel::onOpenSettingsScreen,
+                    onSettingsTabSelected = viewModel::onSettingsTabSelected,
+                    onCreateNewChat = viewModel::onCreateNewChat,
+                    onConversationSelected = viewModel::onConversationSelected,
                     onProviderSelected = viewModel::onProviderSelected,
                     onModelIdChanged = viewModel::onModelIdChanged,
                     onPromptChanged = viewModel::onPromptChanged,
@@ -35,6 +40,9 @@ class MainActivity : ComponentActivity() {
                     onAppNameChanged = viewModel::onAppNameChanged,
                     onAppRefererChanged = viewModel::onAppRefererChanged,
                     onSaveProviderConfig = viewModel::saveProviderConfig,
+                    onMemorySizeChanged = viewModel::onMemorySizeChanged,
+                    onStreamOutputChanged = viewModel::onStreamOutputChanged,
+                    onResetTokenUsage = viewModel::resetTokenUsage,
                     onSendPrompt = viewModel::sendPrompt,
                 )
             }

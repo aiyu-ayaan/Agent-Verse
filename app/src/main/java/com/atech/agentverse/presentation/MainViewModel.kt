@@ -6,16 +6,21 @@ import com.atech.agent.contract.AgentInput
 import com.atech.agent.registry.AgentRegistry
 import com.atech.api_integration_common.model.AvModelConfig
 import com.atech.api_integration_common.model.AvProvider
+import com.atech.core.model.ChatSettings
 import com.atech.core.model.ProviderConfig
 import com.atech.core.orchestrator.AgentOrchestrator
+import com.atech.core.repository.ChatSettingsRepository
+import com.atech.core.repository.ConversationSessionRepository
 import com.atech.core.repository.ProviderConfigRepository
 import com.atech.core.repository.TokenUsageRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -23,18 +28,62 @@ class MainViewModel @Inject constructor(
     private val agentRegistry: AgentRegistry,
     private val providerConfigRepository: ProviderConfigRepository,
     private val tokenUsageRepository: TokenUsageRepository,
+    private val conversationSessionRepository: ConversationSessionRepository,
+    private val chatSettingsRepository: ChatSettingsRepository,
     private val agentOrchestrator: AgentOrchestrator,
 ) : ViewModel() {
 
-    private val conversationId = UUID.randomUUID().toString()
+    private val selectedConversationId = MutableStateFlow<String?>(null)
 
-    private val _uiState = MutableStateFlow(MainUiState(conversationId = conversationId))
+    private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
-        observeConversation()
+        observeSessions()
+        observeSelectedConversationMessages()
         observeUsage()
+        observeChatSettings()
         refreshProviderConfig(_uiState.value.selectedProvider)
+        ensureInitialConversation()
+    }
+
+    fun onOpenChatScreen() {
+        _uiState.update { it.copy(activeScreen = ScreenDestination.CHAT) }
+    }
+
+    fun onOpenSettingsScreen() {
+        _uiState.update { it.copy(activeScreen = ScreenDestination.SETTINGS) }
+    }
+
+    fun onSettingsTabSelected(tab: SettingsTab) {
+        _uiState.update { it.copy(settingsTab = tab) }
+    }
+
+    fun onCreateNewChat() {
+        viewModelScope.launch {
+            val session = conversationSessionRepository.createSession()
+            selectedConversationId.value = session.conversationId
+            _uiState.update {
+                it.copy(
+                    activeScreen = ScreenDestination.CHAT,
+                    selectedConversationId = session.conversationId,
+                    messages = emptyList(),
+                    prompt = "",
+                    errorMessage = null,
+                )
+            }
+        }
+    }
+
+    fun onConversationSelected(conversationId: String) {
+        selectedConversationId.value = conversationId
+        _uiState.update {
+            it.copy(
+                selectedConversationId = conversationId,
+                activeScreen = ScreenDestination.CHAT,
+                errorMessage = null,
+            )
+        }
     }
 
     fun onProviderSelected(provider: AvProvider) {
@@ -72,6 +121,22 @@ class MainViewModel @Inject constructor(
         _uiState.update { it.copy(appReferer = value) }
     }
 
+    fun onMemorySizeChanged(value: Int) {
+        val updated = _uiState.value.chatSettings.copy(memorySize = value)
+        persistChatSettings(updated)
+    }
+
+    fun onStreamOutputChanged(enabled: Boolean) {
+        val updated = _uiState.value.chatSettings.copy(streamOutput = enabled)
+        persistChatSettings(updated)
+    }
+
+    fun resetTokenUsage() {
+        viewModelScope.launch {
+            tokenUsageRepository.clearAllUsage()
+        }
+    }
+
     fun saveProviderConfig() {
         val state = _uiState.value
         viewModelScope.launch {
@@ -91,12 +156,14 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, errorMessage = null) }
+            _uiState.update { it.copy(isSending = true, errorMessage = null, activeScreen = ScreenDestination.CHAT) }
+
+            val conversationId = ensureConversationId()
             saveProviderConfigInternal(state)
 
             val result = agentRegistry.get("chat").execute(
                 AgentInput(
-                    conversationId = state.conversationId,
+                    conversationId = conversationId,
                     provider = state.selectedProvider,
                     modelId = state.modelId,
                     prompt = state.prompt,
@@ -104,14 +171,20 @@ class MainViewModel @Inject constructor(
                         temperature = 0.3,
                         maxTokens = 1024,
                         topP = 0.9,
+                        stream = state.chatSettings.streamOutput,
                     ),
-                    memorySize = 10,
+                    memorySize = state.chatSettings.memorySize,
                 ),
             )
+
+            if (result.isSuccess) {
+                maybeRenameSession(conversationId, state.prompt)
+            }
 
             _uiState.update { current ->
                 if (result.isSuccess) {
                     current.copy(
+                        selectedConversationId = conversationId,
                         prompt = "",
                         isSending = false,
                         errorMessage = null,
@@ -124,6 +197,37 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun ensureInitialConversation() {
+        viewModelScope.launch {
+            ensureConversationId()
+        }
+    }
+
+    private suspend fun ensureConversationId(): String {
+        selectedConversationId.value?.let { return it }
+        val created = conversationSessionRepository.createSession()
+        selectedConversationId.value = created.conversationId
+        _uiState.update { it.copy(selectedConversationId = created.conversationId) }
+        return created.conversationId
+    }
+
+    private suspend fun maybeRenameSession(conversationId: String, prompt: String) {
+        val existing = conversationSessionRepository.getSession(conversationId) ?: return
+        if (existing.title != "New Chat") {
+            return
+        }
+
+        val title = prompt
+            .lineSequence()
+            .firstOrNull()
+            .orEmpty()
+            .trim()
+            .take(48)
+            .ifBlank { "New Chat" }
+
+        conversationSessionRepository.updateSessionTitle(conversationId, title)
     }
 
     private fun refreshProviderConfig(provider: AvProvider) {
@@ -141,11 +245,39 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun observeConversation() {
+    private fun observeSessions() {
         viewModelScope.launch {
-            agentOrchestrator.observeConversation(conversationId).collect { messages ->
-                _uiState.update { it.copy(messages = messages) }
+            conversationSessionRepository.observeSessions().collect { sessions ->
+                val currentSelected = selectedConversationId.value
+                val fallbackSelection = currentSelected
+                    ?.takeIf { id -> sessions.any { it.conversationId == id } }
+                    ?: sessions.firstOrNull()?.conversationId
+
+                selectedConversationId.value = fallbackSelection
+                _uiState.update {
+                    it.copy(
+                        conversations = sessions,
+                        selectedConversationId = fallbackSelection,
+                    )
+                }
             }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeSelectedConversationMessages() {
+        viewModelScope.launch {
+            selectedConversationId
+                .flatMapLatest { conversationId ->
+                    if (conversationId == null) {
+                        flowOf(emptyList())
+                    } else {
+                        agentOrchestrator.observeConversation(conversationId)
+                    }
+                }
+                .collect { messages ->
+                    _uiState.update { it.copy(messages = messages) }
+                }
         }
     }
 
@@ -154,6 +286,21 @@ class MainViewModel @Inject constructor(
             tokenUsageRepository.observeProviderUsage().collect { usage ->
                 _uiState.update { it.copy(providerUsage = usage) }
             }
+        }
+    }
+
+    private fun observeChatSettings() {
+        viewModelScope.launch {
+            chatSettingsRepository.observeSettings().collect { settings ->
+                _uiState.update { it.copy(chatSettings = settings) }
+            }
+        }
+    }
+
+    private fun persistChatSettings(settings: ChatSettings) {
+        viewModelScope.launch {
+            chatSettingsRepository.saveSettings(settings)
+            _uiState.update { it.copy(chatSettings = settings) }
         }
     }
 
