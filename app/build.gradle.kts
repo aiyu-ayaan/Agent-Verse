@@ -57,10 +57,19 @@ android {
 }
 
 dependencies {
+    implementation(project(":ui-common"))
+    implementation(project(":core"))
+    implementation(project(":agent"))
+    implementation(project(":api-integration"))
+    implementation(project(":api-integration-common"))
+    implementation(project(":data"))
+
     implementation(libs.bundles.commonAndroid)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.bundles.compose)
-    implementation(libs.bundles.hilt)
+    implementation(libs.hilt.android)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.bundles.commonTest)
     androidTestImplementation(libs.bundles.commonTest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
