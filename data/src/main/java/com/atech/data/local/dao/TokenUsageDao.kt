@@ -28,4 +28,7 @@ interface TokenUsageDao {
         """,
     )
     fun observeProviderUsage(): Flow<List<ProviderUsageAggregate>>
+
+    @Query("DELETE FROM token_usage")
+    suspend fun clearAll()
 }

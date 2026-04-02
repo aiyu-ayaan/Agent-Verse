@@ -6,7 +6,9 @@ import com.atech.api_integration_common.model.AvRole
 import com.atech.core.model.ConversationMessage
 import com.atech.core.repository.ConversationRepository
 import com.atech.data.local.dao.ConversationDao
+import com.atech.data.local.dao.ConversationSessionDao
 import com.atech.data.local.entity.ConversationMessageEntity
+import com.atech.data.local.entity.ConversationSessionEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -15,9 +17,42 @@ import javax.inject.Singleton
 @Singleton
 class RoomConversationRepository @Inject constructor(
     private val conversationDao: ConversationDao,
+    private val sessionDao: ConversationSessionDao,
 ) : ConversationRepository {
 
     override suspend fun appendMessage(message: ConversationMessage) {
+        val now = System.currentTimeMillis()
+        val existingSession = sessionDao.getById(message.conversationId)
+        val defaultTitle = message.message.content
+            .lineSequence()
+            .firstOrNull()
+            .orEmpty()
+            .trim()
+            .take(48)
+            .ifBlank { "New Chat" }
+
+        if (existingSession == null) {
+            sessionDao.upsert(
+                ConversationSessionEntity(
+                    conversationId = message.conversationId,
+                    title = defaultTitle,
+                    createdAtEpochMs = now,
+                    updatedAtEpochMs = now,
+                ),
+            )
+        } else {
+            sessionDao.upsert(
+                existingSession.copy(
+                    title = if (existingSession.title == "New Chat" && message.message.role == AvRole.USER) {
+                        defaultTitle
+                    } else {
+                        existingSession.title
+                    },
+                    updatedAtEpochMs = now,
+                ),
+            )
+        }
+
         conversationDao.insert(message.toEntity())
     }
 

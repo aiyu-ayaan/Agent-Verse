@@ -50,4 +50,8 @@ class RoomTokenUsageRepository @Inject constructor(
                 )
             }
         }
+
+    override suspend fun clearAllUsage() {
+        tokenUsageDao.clearAll()
+    }
 }

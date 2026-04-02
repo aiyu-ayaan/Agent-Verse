@@ -15,4 +15,6 @@ interface TokenUsageRepository {
     )
 
     fun observeProviderUsage(): Flow<List<ProviderUsageSummary>>
+
+    suspend fun clearAllUsage()
 }
