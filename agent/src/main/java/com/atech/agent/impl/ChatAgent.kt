@@ -24,5 +24,10 @@ class ChatAgent @Inject constructor(
             systemPrompt = "You are AgentVerse ChatAgent. Be concise, correct, and helpful.",
             modelConfig = input.modelConfig,
             memorySize = input.memorySize,
+            onChunk = { chunk ->
+                if (chunk.contentDelta.isNotBlank()) {
+                    input.onStreamDelta?.invoke(chunk.contentDelta)
+                }
+            },
         ).map { AgentResult(it) }
 }

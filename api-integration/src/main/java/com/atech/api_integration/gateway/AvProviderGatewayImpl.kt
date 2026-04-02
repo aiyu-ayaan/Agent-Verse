@@ -9,6 +9,7 @@ import com.atech.api_integration_common.model.AvChatRequest
 import com.atech.api_integration_common.model.AvChatResponse
 import com.atech.api_integration_common.model.AvModelSummary
 import com.atech.api_integration_common.model.AvProvider
+import com.atech.api_integration_common.model.AvStreamChunk
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,11 +20,18 @@ class AvProviderGatewayImpl @Inject constructor(
     private val openRouterConnector: OpenRouterConnector,
 ) : AvProviderGateway {
 
-    override suspend fun chatCompletion(request: AvChatRequest): Result<AvChatResponse> {
+    override suspend fun chatCompletion(
+        request: AvChatRequest,
+        onChunk: suspend (AvStreamChunk) -> Unit,
+    ): Result<AvChatResponse> {
         val credentials = credentialProvider.getCredentials(request.provider)
             ?: return Result.failure(AvApiError.MissingCredentials(request.provider.name))
 
-        return connectorFor(request.provider).chatCompletion(request, credentials)
+        return connectorFor(request.provider).chatCompletion(
+            request = request,
+            credentials = credentials,
+            onChunk = onChunk,
+        )
     }
 
     override suspend fun listModels(provider: AvProvider): Result<List<AvModelSummary>> {

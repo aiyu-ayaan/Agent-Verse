@@ -2,6 +2,7 @@ package com.atech.agentverse.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +45,6 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -324,9 +324,11 @@ private fun ChatScreenContent(
 ) {
     val listState = rememberLazyListState()
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+    LaunchedEffect(state.messages.size, state.streamingAssistantText.length) {
+        val extraStreamingRow = if (state.streamingAssistantText.isNotBlank()) 1 else 0
+        val targetIndex = (state.messages.size + extraStreamingRow - 1).coerceAtLeast(0)
+        if (state.messages.isNotEmpty() || state.streamingAssistantText.isNotBlank()) {
+            listState.animateScrollToItem(targetIndex)
         }
     }
 
@@ -437,7 +439,17 @@ private fun MessageTimeline(
             )
         }
 
-        if (state.isSending) {
+        if (state.streamingAssistantText.isNotBlank()) {
+            item(key = "streaming-assistant") {
+                AvChatBubble(
+                    roleLabel = "ASSISTANT • ${state.selectedProvider.name} (streaming)",
+                    content = state.streamingAssistantText,
+                    isUser = false,
+                )
+            }
+        }
+
+        if (state.isSending && state.streamingAssistantText.isBlank()) {
             item {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -530,25 +542,55 @@ private fun SettingsScreenContent(
     onResetTokenUsage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = SettingsTab.entries
-
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        val tabs = listOf(
+            SettingsTab.INTEGRATION to "Integration",
+            SettingsTab.TOKENS to "Tokens",
+            SettingsTab.CHATS to "Chats",
+        )
+
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         ) {
-            PrimaryTabRow(selectedTabIndex = tabs.indexOf(state.settingsTab)) {
-                tabs.forEach { tab ->
-                    Tab(
-                        selected = state.settingsTab == tab,
-                        onClick = { onSettingsTabSelected(tab) },
-                        text = { Text(tab.name.lowercase().replaceFirstChar { it.titlecase() }) },
-                    )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                tabs.forEach { (tab, label) ->
+                    val selected = state.settingsTab == tab
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSettingsTabSelected(tab) }
+                            .padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .height(2.dp)
+                                .width(52.dp)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                                    shape = RoundedCornerShape(2.dp),
+                                ),
+                        )
+                    }
                 }
             }
         }

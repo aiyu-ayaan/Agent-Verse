@@ -7,6 +7,7 @@ import com.atech.api_integration_common.model.AvMessage
 import com.atech.api_integration_common.model.AvModelConfig
 import com.atech.api_integration_common.model.AvProvider
 import com.atech.api_integration_common.model.AvRole
+import com.atech.api_integration_common.model.AvStreamChunk
 import com.atech.core.model.ConversationMessage
 import com.atech.core.repository.ConversationRepository
 import com.atech.core.repository.TokenUsageRepository
@@ -25,6 +26,7 @@ class AgentOrchestratorImpl @Inject constructor(
     override suspend fun executeChat(
         request: AvChatRequest,
         conversationId: String,
+        onChunk: suspend (AvStreamChunk) -> Unit,
     ): Result<AvChatResponse> {
         val timestamp = System.currentTimeMillis()
         request.messages.lastOrNull { it.role == AvRole.USER }?.let { userMessage ->
@@ -39,7 +41,7 @@ class AgentOrchestratorImpl @Inject constructor(
             )
         }
 
-        return providerGateway.chatCompletion(request).onSuccess { response ->
+        return providerGateway.chatCompletion(request, onChunk).onSuccess { response ->
             conversationRepository.appendMessage(
                 ConversationMessage(
                     conversationId = conversationId,
@@ -67,6 +69,7 @@ class AgentOrchestratorImpl @Inject constructor(
         systemPrompt: String?,
         modelConfig: AvModelConfig,
         memorySize: Int,
+        onChunk: suspend (AvStreamChunk) -> Unit,
     ): Result<AvChatResponse> {
         val history = conversationRepository.getRecentMessages(conversationId, memorySize)
             .map { it.message }
@@ -87,7 +90,11 @@ class AgentOrchestratorImpl @Inject constructor(
             modelConfig = modelConfig,
         )
 
-        return executeChat(request, conversationId)
+        return executeChat(
+            request = request,
+            conversationId = conversationId,
+            onChunk = onChunk,
+        )
     }
 
     override fun observeConversation(conversationId: String): Flow<List<ChatTimelineItem>> =

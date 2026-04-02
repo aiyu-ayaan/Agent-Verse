@@ -14,6 +14,7 @@ import com.atech.api_integration_common.model.AvMessage
 import com.atech.api_integration_common.model.AvModelSummary
 import com.atech.api_integration_common.model.AvProvider
 import com.atech.api_integration_common.model.AvProviderCredentials
+import com.atech.api_integration_common.model.AvStreamChunk
 import com.atech.api_integration_common.model.AvRole
 import com.atech.api_integration_common.model.AvTokenUsage
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +38,7 @@ abstract class OpenAiCompatibleConnector(
     override suspend fun chatCompletion(
         request: AvChatRequest,
         credentials: AvProviderCredentials,
+        onChunk: suspend (AvStreamChunk) -> Unit,
     ): Result<AvChatResponse> = withContext(Dispatchers.IO) {
         runCatching {
             require(request.provider == provider) {
@@ -56,15 +58,20 @@ abstract class OpenAiCompatibleConnector(
             )
 
             val body = json.encodeToString(payload)
-            val raw = executePost(
-                url = buildUrl(credentials, "chat/completions"),
-                headers = buildHeaders(credentials),
-                body = body,
-            )
-
             if (request.modelConfig.stream) {
-                parseStreamCompletion(raw, request)
+                executeStreamingPost(
+                    url = buildUrl(credentials, "chat/completions"),
+                    headers = buildHeaders(credentials),
+                    body = body,
+                    request = request,
+                    onChunk = onChunk,
+                )
             } else {
+                val raw = executePost(
+                    url = buildUrl(credentials, "chat/completions"),
+                    headers = buildHeaders(credentials),
+                    body = body,
+                )
                 parseStandardCompletion(raw, request)
             }
         }.recoverCatching { throwable ->
@@ -179,31 +186,55 @@ abstract class OpenAiCompatibleConnector(
         )
     }
 
-    private fun parseStreamCompletion(raw: String, request: AvChatRequest): AvChatResponse {
-        if (!raw.contains("data:")) {
-            return parseStandardCompletion(raw, request)
-        }
+    private suspend fun executeStreamingPost(
+        url: String,
+        headers: Map<String, String>,
+        body: String,
+        request: AvChatRequest,
+        onChunk: suspend (AvStreamChunk) -> Unit,
+    ): AvChatResponse {
+        val requestBody = body.toRequestBody("application/json".toMediaType())
+        val httpRequest = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .applyHeaders(headers)
+            .build()
 
-        var requestId = ""
-        var model = request.modelId
-        var createdAtEpochMs = System.currentTimeMillis()
-        var role: AvRole = AvRole.ASSISTANT
-        var finishReason: String? = null
-        var usage: OpenAiUsage? = null
-        val content = StringBuilder()
+        okHttpClient.newCall(httpRequest).execute().use { response ->
+            val source = response.body.source()
+            val rawBuilder = StringBuilder()
+            if (!response.isSuccessful) {
+                val payload = source.readUtf8()
+                throw HttpStatusException(response.code, payload)
+            }
 
-        raw.lineSequence()
-            .map { it.trim() }
-            .filter { it.startsWith("data:") }
-            .forEach { line ->
-                val payload = line.removePrefix("data:").trim()
-                if (payload == "[DONE]" || payload.isEmpty()) {
-                    return@forEach
+            var sawStreamData = false
+            var requestId = ""
+            var model = request.modelId
+            var createdAtEpochMs = System.currentTimeMillis()
+            var role: AvRole = AvRole.ASSISTANT
+            var finishReason: String? = null
+            var usage: OpenAiUsage? = null
+            val content = StringBuilder()
+
+            while (!source.exhausted()) {
+                val line = source.readUtf8Line() ?: continue
+                rawBuilder.append(line).append('\n')
+                val payloadLine = line.trim()
+
+                if (!payloadLine.startsWith("data:")) {
+                    continue
+                }
+
+                sawStreamData = true
+                val payload = payloadLine.removePrefix("data:").trim()
+                if (payload == "[DONE]" || payload.isBlank()) {
+                    continue
                 }
 
                 val chunk = runCatching {
                     json.decodeFromString<OpenAiChatCompletionChunk>(payload)
-                }.getOrNull() ?: return@forEach
+                }.getOrNull() ?: continue
 
                 if (!chunk.id.isNullOrBlank()) requestId = chunk.id
                 if (!chunk.model.isNullOrBlank()) model = chunk.model
@@ -212,20 +243,39 @@ abstract class OpenAiCompatibleConnector(
 
                 val choice = chunk.choices.firstOrNull()
                 choice?.delta?.role?.let { role = mapRole(it) }
-                choice?.delta?.content?.let(content::append)
+
+                choice?.delta?.content?.takeIf { it.isNotBlank() }?.let { delta ->
+                    content.append(delta)
+                    onChunk(
+                        AvStreamChunk(
+                            contentDelta = delta,
+                            requestId = requestId.takeIf { it.isNotBlank() },
+                            modelId = model,
+                            createdAtEpochMs = createdAtEpochMs,
+                            finishReason = choice.finishReason,
+                        ),
+                    )
+                }
+
                 choice?.finishReason?.takeIf { it.isNotBlank() }?.let { finishReason = it }
             }
 
-        return AvChatResponse(
-            requestId = requestId,
-            provider = provider,
-            modelId = model,
-            createdAtEpochMs = createdAtEpochMs,
-            message = AvMessage(role = role, content = content.toString()),
-            finishReason = finishReason,
-            usage = usage.toDomain(),
-            rawResponse = raw,
-        )
+            val raw = rawBuilder.toString()
+            if (!sawStreamData) {
+                return parseStandardCompletion(raw, request)
+            }
+
+            return AvChatResponse(
+                requestId = requestId,
+                provider = provider,
+                modelId = model,
+                createdAtEpochMs = createdAtEpochMs,
+                message = AvMessage(role = role, content = content.toString()),
+                finishReason = finishReason,
+                usage = usage.toDomain(),
+                rawResponse = raw,
+            )
+        }
     }
 
     private fun mapRole(value: String): AvRole = when (value.lowercase()) {

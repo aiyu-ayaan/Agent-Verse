@@ -20,6 +20,7 @@ data class MainUiState(
     val appReferer: String = "",
     val isSending: Boolean = false,
     val errorMessage: String? = null,
+    val streamingAssistantText: String = "",
     val messages: List<ChatTimelineItem> = emptyList(),
     val providerUsage: List<ProviderUsageSummary> = emptyList(),
     val chatSettings: ChatSettings = ChatSettings(),

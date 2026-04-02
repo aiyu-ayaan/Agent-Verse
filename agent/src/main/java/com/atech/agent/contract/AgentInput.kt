@@ -10,4 +10,5 @@ data class AgentInput(
     val prompt: String,
     val modelConfig: AvModelConfig = AvModelConfig(),
     val memorySize: Int = 10,
+    val onStreamDelta: (suspend (String) -> Unit)? = null,
 )

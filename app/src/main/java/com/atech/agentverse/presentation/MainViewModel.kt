@@ -70,6 +70,7 @@ class MainViewModel @Inject constructor(
                     messages = emptyList(),
                     prompt = "",
                     errorMessage = null,
+                    streamingAssistantText = "",
                 )
             }
         }
@@ -82,6 +83,7 @@ class MainViewModel @Inject constructor(
                 selectedConversationId = conversationId,
                 activeScreen = ScreenDestination.CHAT,
                 errorMessage = null,
+                streamingAssistantText = "",
             )
         }
     }
@@ -156,7 +158,14 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, errorMessage = null, activeScreen = ScreenDestination.CHAT) }
+            _uiState.update {
+                it.copy(
+                    isSending = true,
+                    errorMessage = null,
+                    activeScreen = ScreenDestination.CHAT,
+                    streamingAssistantText = "",
+                )
+            }
 
             val conversationId = ensureConversationId()
             saveProviderConfigInternal(state)
@@ -174,6 +183,13 @@ class MainViewModel @Inject constructor(
                         stream = state.chatSettings.streamOutput,
                     ),
                     memorySize = state.chatSettings.memorySize,
+                    onStreamDelta = { delta ->
+                        _uiState.update { current ->
+                            current.copy(
+                                streamingAssistantText = current.streamingAssistantText + delta,
+                            )
+                        }
+                    },
                 ),
             )
 
@@ -188,11 +204,13 @@ class MainViewModel @Inject constructor(
                         prompt = "",
                         isSending = false,
                         errorMessage = null,
+                        streamingAssistantText = "",
                     )
                 } else {
                     current.copy(
                         isSending = false,
                         errorMessage = result.exceptionOrNull()?.message ?: "Failed to send prompt",
+                        streamingAssistantText = "",
                     )
                 }
             }
